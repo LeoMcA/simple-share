@@ -21,6 +21,7 @@ program
 
 program
   .option('-s, --server [url:port]', 'Signalling server to use')
+  .option('-c, --client [url]', 'Path to client')
   .arguments('[file]')
   .action(function(file){
     fileName = file;
@@ -34,7 +35,10 @@ program
         sid = createSid(fileBuffer);
         
         if(program.server) {
-          console.log('http://' + program.server + '/client.html?s=' + program.server + '&i=' + sid);
+          if(program.client)
+            console.log(program.client + '?s=' + program.server + '&i=' + sid);
+          else
+            console.log('http://' + program.server + '/client.html?s=' + program.server + '&i=' + sid);
           ws = new WebSocket('ws://' + program.server);
         }
         else {
