@@ -1,0 +1,142 @@
+#!/usr/bin/env node
+
+var program = require('commander');
+var fs = require('fs');
+var webrtc = require('wrtc');
+var WebSocket = require('ws');
+var crypto = require('crypto');
+
+var fileName;
+var fileBuffer;
+var sid;
+var ws;
+var pc = {};
+var pcConfig = {
+  iceServers: [{ url: 'stun:stun.services.mozilla.com' }]
+}
+var dc = {};
+
+program
+  .version('0.0.0')
+
+program
+  .option('-s, --server [url:port]', 'Signalling server to use')
+  .arguments('[file]')
+  .action(function(file){
+    fileName = file;
+    fs.stat(fileName, function(err, stats){
+      if(err) onError(err);
+      fs.readFile(fileName, function(err, data){
+        if(err) onError(err);
+        
+        fileBuffer = data;
+        
+        sid = createSid(fileBuffer);
+        
+        if(program.server) {
+          console.log('http://' + program.server + '/client.html?q=' + sid);
+          ws = new WebSocket('ws://' + program.server);
+        }
+        else {
+          console.log('http://simple-share.mca.me.uk/client.html?q=' + sid);
+          ws = new WebSocket('ws://simple-share.mca.me.uk');
+        }
+        ws.on('error', onError);
+        ws.on('open', function(){
+          signallingSend({
+            type: 'file-info',
+            sid: sid,
+            length: fileBuffer.length
+          });
+        });
+        ws.on('message', function(dataString){
+          data = JSON.parse(dataString);
+          switch(data.type){
+              case 'file-request':
+                onFileRequest(data);
+                break;
+              case 'ice-candidate':
+                onIceCandidate(data);
+                break;
+              case 'webrtc-answer':
+                onWebrtcAnswer(data);
+                break;
+          }
+        });
+      });
+    });
+  });
+
+function onFileRequest(data){
+  var cid = data.cid;
+  
+  var p = pc[cid] = new webrtc.RTCPeerConnection(pcConfig);
+  
+  var d = dc[cid] = p.createDataChannel('file');
+  d.binaryType = 'arraybuffer';
+  
+  d.onopen = function(){
+    //d.send(new Uint8Array(fileBuffer));
+    for(var i = 0; i <= fileBuffer.length; i += 66528){
+      d.send(new Uint8Array(fileBuffer.slice(i, i + 66528)));
+    }
+  }
+  
+  p.onicecandidate = function(evt){
+    if(evt.candidate)
+      signallingSend({
+        type: 'ice-candidate',
+        sid: sid,
+        cid: cid,
+        candidate: evt.candidate
+      });
+  }
+  
+  p.createOffer(function(offer){
+    p.setLocalDescription(offer, function(){
+      signallingSend({
+        type: 'webrtc-offer',
+        sid: sid,
+        cid: cid,
+        offer: p.localDescription
+      });
+    }, onError);
+  }, onError);
+}
+
+function onIceCandidate(data){
+  var cid = data.cid;
+  var p = pc[cid];
+  p.addIceCandidate(new webrtc.RTCIceCandidate(data.candidate), function(){}, onError);
+}
+
+function onWebrtcAnswer(data){
+  var cid = data.cid;
+  var p = pc[cid];
+  p.setRemoteDescription(new webrtc.RTCSessionDescription(data.answer), function(){}, onError);
+}
+
+program.parse(process.argv);
+
+if(typeof fileName === 'undefined'){
+  console.error('No file specified!');
+  process.exit(1);
+}
+
+function onError(err){
+  console.log(err);
+  process.exit(1);
+}
+
+function createSid(file){
+  return crypto
+    .createHash('sha1')
+    .update(Math.random()+"")
+    .update(Date.now()+"")
+    .update(file)
+    .digest('hex')
+}
+
+function signallingSend(json){
+  ws.send(JSON.stringify(json));
+}
