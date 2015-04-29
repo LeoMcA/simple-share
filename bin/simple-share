@@ -34,11 +34,11 @@ program
         sid = createSid(fileBuffer);
         
         if(program.server) {
-          console.log('http://' + program.server + '/client.html?q=' + sid);
+          console.log('http://' + program.server + '/client.html?s=' + program.server + '&i=' + sid);
           ws = new WebSocket('ws://' + program.server);
         }
         else {
-          console.log('http://simple-share.mca.me.uk/client.html?q=' + sid);
+          console.log('http://simple-share.mca.me.uk/client.html?s=simple-share.mca.me.uk&i=' + sid);
           ws = new WebSocket('ws://simple-share.mca.me.uk');
         }
         ws.on('error', onError);

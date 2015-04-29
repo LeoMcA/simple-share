@@ -15,7 +15,7 @@ var fileLength;
 var blobLength = 0;
 var blobArray = [];
 
-var ws = new WebSocket('ws://localhost:8080');
+var ws = new WebSocket('ws://' + getParameterByName('s'));
 
 ws.onopen = function(){
   signallingSend({
@@ -100,7 +100,7 @@ function createCid(){
 }
 
 function getSid(){
-  return getParameterByName('q');
+  return getParameterByName('i');
 }
 
 function getParameterByName(name) {
