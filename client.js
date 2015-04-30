@@ -5,9 +5,7 @@ webrtc.RTCIceCandidate = window.RTCIceCandidate || window.mozRTCIceCandidate || 
 webrtc.RTCSessionDescription = window.RTCSessionDescription || window.mozRTCSessionDescription || window.webkitRTCSessionDescription;
 
 common.setClient(true);
-
-var sid = getSid();
-var cid = common.setCid(createCid());
+common.setSid(getSid());
 
 var blobLength = 0;
 var blobArray = [];
@@ -30,10 +28,6 @@ function onDataChannel(dc){
       window.location = URL.createObjectURL(new Blob(blobArray));
     }
   }
-}
-
-function createCid(){
-  return Date.now()+""+Math.floor(Math.random()*1000);
 }
 
 function getSid(){

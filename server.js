@@ -4,7 +4,7 @@ var wss = new WebSocketServer({ port: 8080 });
 
 var server = {};
 var fileInfo = {};
-var client = {};
+var client = [];
 
 wss.on('connection', function(ws){
   ws.on('message', function(dataString){
@@ -16,8 +16,15 @@ wss.on('connection', function(ws){
           server[data.sid] = ws;
           fileInfo[data.sid] = data;
           break;
+        case 'cid-request':
+          var cid = client.length;
+          client.push(ws);
+          ws.send(JSON.stringify({
+            type: 'cid',
+            cid: cid
+          }));
+          break;
         case 'file-request':
-          client[data.cid] = ws;
           ws.send(JSON.stringify(fileInfo[data.sid]));
           server[data.sid].send(dataString);
           break;
