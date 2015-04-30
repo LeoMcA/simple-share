@@ -2,19 +2,14 @@
 
 var program = require('commander');
 var fs = require('fs');
-var webrtc = require('wrtc');
 var WebSocket = require('ws');
 var crypto = require('crypto');
 
+var common = require('../lib/common.js');
+
+common.setWebrtc(require('wrtc'));
+
 var fileName;
-var fileBuffer;
-var sid;
-var ws;
-var pc = {};
-var pcConfig = {
-  iceServers: [{ url: 'stun:stun.services.mozilla.com' }]
-}
-var dc = {};
 
 program
   .version('0.0.0')
@@ -26,99 +21,36 @@ program
   .action(function(file){
     fileName = file;
     fs.stat(fileName, function(err, stats){
-      if(err) onError(err);
+      if(err) common.onError(err);
       fs.readFile(fileName, function(err, data){
-        if(err) onError(err);
+        if(err) common.onError(err);
         
-        fileBuffer = data;
+        fileBuffer = common.setFileBuffer(data, data.length);
         
-        sid = createSid(fileBuffer);
+        var sid = common.setSid(createHexHash('sha-1', fileBuffer));
         
-        if(program.server) {
+        if(program.server){
           if(program.client)
             console.log(program.client + '?s=' + program.server + '&i=' + sid);
           else
             console.log('http://' + program.server + '/client.html?s=' + program.server + '&i=' + sid);
-          ws = new WebSocket('ws://' + program.server);
-        }
-        else {
+          var ws = common.setSignalling(new WebSocket('ws://' + program.server));
+        } else {
           console.log('http://simple-share.mca.me.uk/client.html?s=simple-share.mca.me.uk&i=' + sid);
-          ws = new WebSocket('ws://simple-share.mca.me.uk');
+          var ws = common.setSignalling(new WebSocket('ws://simple-share.mca.me.uk'));
         }
-        ws.on('error', onError);
-        ws.on('open', function(){
-          signallingSend({
-            type: 'file-info',
-            sid: sid,
-            length: fileBuffer.length
-          });
+        ws.on('error', function(err){
+          common.onError(err);
         });
-        ws.on('message', function(dataString){
-          data = JSON.parse(dataString);
-          switch(data.type){
-              case 'file-request':
-                onFileRequest(data);
-                break;
-              case 'ice-candidate':
-                onIceCandidate(data);
-                break;
-              case 'webrtc-answer':
-                onWebrtcAnswer(data);
-                break;
-          }
+        ws.on('open', function(){
+          common.onSignallingConnect();
+        });
+        ws.on('message', function(data){
+          common.onSignallingMessage(data, onDataChannel);
         });
       });
     });
   });
-
-function onFileRequest(data){
-  var cid = data.cid;
-  
-  var p = pc[cid] = new webrtc.RTCPeerConnection(pcConfig);
-  
-  var d = dc[cid] = p.createDataChannel('file');
-  d.binaryType = 'arraybuffer';
-  
-  d.onopen = function(){
-    //d.send(new Uint8Array(fileBuffer));
-    for(var i = 0; i <= fileBuffer.length; i += 66528){
-      d.send(new Uint8Array(fileBuffer.slice(i, i + 66528)));
-    }
-  }
-  
-  p.onicecandidate = function(evt){
-    if(evt.candidate)
-      signallingSend({
-        type: 'ice-candidate',
-        sid: sid,
-        cid: cid,
-        candidate: evt.candidate
-      });
-  }
-  
-  p.createOffer(function(offer){
-    p.setLocalDescription(offer, function(){
-      signallingSend({
-        type: 'webrtc-offer',
-        sid: sid,
-        cid: cid,
-        offer: p.localDescription
-      });
-    }, onError);
-  }, onError);
-}
-
-function onIceCandidate(data){
-  var cid = data.cid;
-  var p = pc[cid];
-  p.addIceCandidate(new webrtc.RTCIceCandidate(data.candidate), function(){}, onError);
-}
-
-function onWebrtcAnswer(data){
-  var cid = data.cid;
-  var p = pc[cid];
-  p.setRemoteDescription(new webrtc.RTCSessionDescription(data.answer), function(){}, onError);
-}
 
 program.parse(process.argv);
 
@@ -127,20 +59,17 @@ if(typeof fileName === 'undefined'){
   process.exit(1);
 }
 
-function onError(err){
-  console.log(err);
-  process.exit(1);
+function onDataChannel(dc){
+  //dc.send(new Uint8Array(fileBuffer));
+  console.log('dc open');
+  for(var i = 0; i <= fileBuffer.length; i += 66528){
+    dc.send(new Uint8Array(fileBuffer.slice(i, i + 66528)));
+  }
 }
 
-function createSid(file){
+function createHexHash(algo, data){
   return crypto
     .createHash('sha1')
-    .update(Math.random()+"")
-    .update(Date.now()+"")
-    .update(file)
+    .update(data)
     .digest('hex')
-}
-
-function signallingSend(json){
-  ws.send(JSON.stringify(json));
 }
