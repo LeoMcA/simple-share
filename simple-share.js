@@ -1,4 +1,3 @@
-var module = {};
 var webrtc = {};
 
 webrtc.RTCPeerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection;
