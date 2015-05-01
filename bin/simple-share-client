@@ -1,0 +1,62 @@
+#!/usr/bin/env node
+
+var program = require('commander');
+var fs = require('fs');
+var WebSocket = require('ws');
+
+var common = require('../lib/common.js');
+
+common.setWebrtc(require('wrtc'));
+common.setClient(true);
+
+program
+  .version('0.0.0')
+
+program
+  .option('-s, --server [url:port]', 'Signalling server to use')
+  .option('-i, --sid [sid]', 'Server id')
+  .arguments('[file]')
+  .action(function(file){
+    common.setSid(program.sid);
+  
+    fileName = file;
+        
+    if(program.server)
+      var ws = common.setSignalling(new WebSocket('ws://' + program.server));
+    else
+      var ws = common.setSignalling(new WebSocket('ws://simple-share.mca.me.uk'));
+    ws.on('error', function(err){
+      common.onError(err);
+    });
+    ws.on('open', function(){
+      common.onSignallingConnect();
+    });
+    ws.on('message', function(data){
+      common.onSignallingMessage(data, onDataChannel);
+    });
+  });
+
+program.parse(process.argv);
+
+function onDataChannel(dc){
+  console.log('dc open');
+  var bufferLength = 0;
+  var bufferArray = [];
+  dc.onmessage = function(data){
+    bufferLength += data.data.byteLength;
+    bufferArray.push(new Buffer(new Uint8Array(data.data)));
+    if(bufferLength >= common.fileLength) {
+      fs.writeFile(fileName, Buffer.concat(bufferArray, bufferLength), function(err){
+        if(err) common.onError(err);
+        console.log('SAVED!');
+      });
+    }
+  }
+}
+
+function createHexHash(algo, data){
+  return crypto
+    .createHash('sha1')
+    .update(data)
+    .digest('hex')
+}
