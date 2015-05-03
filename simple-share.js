@@ -79,11 +79,18 @@ function createHexHash(algo, arrayBuffer, callback){
   crypto.subtle.digest(algo, arrayBuffer).then(function(hash){
     var hex = "";
     var array = new Uint8Array(hash);
-    array.forEach(function(byte){
+    /*array.forEach(function(byte){
       var pad = "";
       if(byte < 16) pad = "0"
       hex += pad + byte.toString(16);
-    });
+    });*/
+    // only in v 38 of firefox, not sure about chrome
+    for(var i = 0; i < array.byteLength; i++){
+      var byte = array[i];
+      var pad = "";
+      if(byte < 16) pad = "0"
+      hex += pad + byte.toString(16);
+    }
     callback(hex);
   });
 }
